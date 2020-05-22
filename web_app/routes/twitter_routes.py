@@ -1,20 +1,19 @@
 from flask import Blueprint, render_template, jsonify
-from my_app.models import db, User, Tweets, parse_records
-from my_app.services.twitter_service import twitter_api
-from my_app.services.basilica_service import basilica_api_client
+from web_app.services.twitter_service import api as twitter_api
+from web_app.models import User, Tweet, db
+from web_app.services.basilica_service import connection as basilica_connection
 
 twitter_routes = Blueprint("twitter_routes", __name__)
 
 @twitter_routes.route("/users/<screen_name>")
 def get_user(screen_name=None):
     print(screen_name)
-
-    api = twitter_api_client()
-
-    twitter_user = api.get_user(screen_name)
-    statuses = api.user_timeline(screen_name, tweet_mode="extended", count=150, exclude_replies=True, include_rts=False)
-    print("STATUSES COUNT:", len(statuses))
-    return jsonify({"user": user._json, "tweets": [s._json for s in statuses]})
+    twitter_user = twitter_api.get_user(screen_name)
+    statuses = twitter_api.user_timeline(screen_name, tweet_mode="extended", count=150, exclude_replies=True, include_rts=False)
+    # return jsonify({
+    #     "user": user._json,
+    #      "tweets": [status._json for status in statuses]
+    # })
 
     # get existing user from the db or initialize a new one:
     db_user = User.query.get(twitter_user.id) or User(id=twitter_user.id)
@@ -24,13 +23,12 @@ def get_user(screen_name=None):
     db_user.followers_count = twitter_user.followers_count
     db.session.add(db_user)
     db.session.commit()
-    #return "OK"
     #breakpoint()
-
-    basilica_api = basilica_api_client()
+#   return "OK"
+    basilica_api = basilica_connection
 
     all_tweet_texts = [status.full_text for status in statuses]
-    embeddings = list(basilica_api.embed_sentences(all_tweet_texts, model="twitter"))
+    embeddings = list(basilica_connection.embed_sentences(all_tweet_texts, model="twitter"))
     print("NUMBER OF EMBEDDINGS", len(embeddings))
 
     # TODO: explore using the zip() function maybe...
@@ -46,9 +44,11 @@ def get_user(screen_name=None):
         #embedding = basilica_client.embed_sentence(status.full_text, model="twitter") # todo: prefer to make a single request to basilica with all the tweet texts, instead of a request per tweet
         embedding = embeddings[counter]
         print(len(embedding))
-        db_tweet.embedding = embedding
+        db_tweet.embedding = embeddings[counter]
         db.session.add(db_tweet)
         counter+=1
     db.session.commit()
     #breakpoint()
     return "OK"
+    #return render_template("user.html", user=db_user, tweets=statuses) # tweets=db_tweets
+
